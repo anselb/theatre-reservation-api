@@ -43,23 +43,75 @@ app.post('/theaters/:theaterId/sessions/new', function(req, res) {
   var theaters = db.collection("theaters");
   var sessions = db.collection("sessions");
 
-  //FIXME: Set up theater promise leading to sessions insertion
-  var theater = theaters.findOne({"_id": theaterId});
-  sessions.insertOne({
-      "name" : "Action Movie 5",
-      "description" : "Another action movie",
-      "start" : new Date("2015-03-11T15:00:00.000Z"),
-      "end" : new Date("2015-03-11T16:00:00.000Z"),
-      "price" : 10,
-      "seatsAvailable" : theater.seatsAvailable,
-      "seats" : theater.seats,
-      "reservations" : []
-    });
+  theaters.findOne({"_id": theaterId})
+    .then((theater) => {
+      sessions.insertOne({
+        "_id" : 1,
+        "name" : "Action Movie 5",
+        "description" : "Another action movie",
+        "start" : new Date("2015-03-11T15:00:00.000Z"),
+        "end" : new Date("2015-03-11T16:00:00.000Z"),
+        "price" : 10,
+        "seatsAvailable" : theater.seatsAvailable,
+        "seats" : theater.seats,
+        "reservations" : []
+      });
+    })
 });
 
 // Edit the reservation of a session
 app.post('/theaters/:theaterId/sessions/:sessionId/edit', function(req, res) {
-  res.json({'stub': `[${req.originalUrl}] Endpoint works! Replace me in Step 2.`});
+  var sessionId = 1;
+  var cartId = 1;
+
+  var seats = [[1, 5], [1, 6]];
+  var seatsQuery = [];
+  var setSeatsSelection = {};
+
+  for(var i = 0; i < seats.length; i++) {
+    var seatSelector = {};
+    var seatSelection = 'seats.' + seats[i][0] + '.' + seats[i][1];
+    // Part of $and query to check if seat is free
+    seatSelector[seatSelection] = 0;
+    seatsQuery.push(seatSelector);
+    // Part of $set operation to set seat as occupied
+    setSeatsSelection[seatSelection] = 1;
+  }
+
+  var sessions = db.collection("sessions");
+
+  sessions.findOne({_id: sessionId})
+    .then((session) => {
+      console.log(session)
+      var result = sessions.updateOne({
+            _id: sessionId,
+            $and: seatsQuery
+          },
+          {
+            $set: setSeatsSelection,
+            $inc: { seatsAvailable: -seats.length },
+            $push: {
+              reservations: {
+                  _id: cartId,
+                  seats: seats,
+                  price: session.price,
+                  total: session.price * seats.length
+              }
+            }
+        });
+      return result
+    }).then((result) => {
+      // Failed to reserve seats
+      if(result.nModified == 0) {
+        console.log("failed")
+      }
+      // Reservation was successful
+      if(result.nModified == 1) {
+        console.log("success")
+      }
+    }).catch((err) => {
+      console.log(err)
+    })
 });
 
 // Get a cart
